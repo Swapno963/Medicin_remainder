@@ -33,3 +33,49 @@ class Recurrence(models.Model):
             days = self.days_of_week or 'every day'
             return "Weekly on {} at {}:{}".format(days, self.hour, self.minute)
         return "Custom schedule"
+    
+
+    def get_schedule(self):
+        if self.repeat == 'daily':
+            # Default to all days if not specified
+            days = self.days_of_week or '0,1,2,3,4,5,6'
+            return CrontabSchedule.objects.get_or_create(
+                minute=self.minute,
+                hour=self.hour,
+                day_of_week=days,
+                timezone=TIMEZONE
+            )
+        elif self.repeat == 'weekly':
+            if not self.days_of_week:
+                raise ValueError("Days of week must be provided for weekly recurrence")
+            return CrontabSchedule.objects.get_or_create(
+                minute=self.minute,
+                hour=self.hour,
+                day_of_week=self.days_of_week,
+                timezone=TIMEZONE
+            )
+        elif self.repeat == 'monthly':
+            day_of_month = self.day_of_month or 1
+            return CrontabSchedule.objects.get_or_create(
+                minute=self.minute,
+                hour=self.hour,
+                day_of_month=day_of_month,
+                timezone=TIMEZONE
+            )
+        elif self.repeat == 'yearly':
+            if not self.day_of_month or not self.month_of_year:
+                raise ValueError("Both day of month and month of year must be provided for yearly recurrence")
+            return CrontabSchedule.objects.get_or_create(
+                minute=self.minute,
+                hour=self.hour,
+                day_of_month=self.day_of_month,
+                month_of_year=self.month_of_year,
+                timezone=TIMEZONE
+            )
+        elif self.repeat_type == 'interval':
+            return IntervalSchedule.objects.get_or_create(
+                every=self.interval,
+                period=IntervalSchedule.HOURS,
+            )
+
+        return None
