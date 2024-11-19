@@ -1,8 +1,10 @@
 import calendar
 import zoneinfo
+import json
 from django.db import models
 from django_celery_beat.models import CrontabSchedule, IntervalSchedule
-
+from django_celery_beat.models import PeriodicTask
+from django_lifecycle import hook,AFTER_CREATE
 TIMEZONE = zoneinfo.ZoneInfo('Asia/Kolkata')
 
 class Recurrence(models.Model):
@@ -79,3 +81,34 @@ class Recurrence(models.Model):
             )
 
         return None
+    
+
+
+
+
+
+class Medicine(models.Model):
+    name = models.CharField(max_length=255)
+    dosage = models.CharField(max_length=255)
+    recurrence = models.ForeignKey(Recurrence, on_delete=models.CASCADE, blank=True, null=True)
+
+
+    def __str__(self):
+        return f"{self.name} - {self.dosage}"
+
+    @hook(AFTER_CREATE)
+    def schedule_task(self):
+        if not self.recurrence or self.recurrence.repeat == 'none':
+            PeriodicTask.objects.filter(name=f'medicine-{self.id}').delete()
+            return
+
+        schedule, _ = self.recurrence.get_schedule()
+        PeriodicTask.objects.update_or_create(
+            name=f'medicine-{self.id}',
+            defaults={
+                'task': 'reminder.tasks.send_medicine_reminder',
+                'crontab': schedule,
+                'enabled': True,
+                'args': json.dumps([self.id]),
+            }
+        )
